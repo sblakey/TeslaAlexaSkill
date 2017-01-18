@@ -1,0 +1,6 @@
+Precondition Warm up
+Precondition Cool down
+Precondition Start
+Climate If it's ready
+Climate The temperature
+Climate Status
