@@ -21,7 +21,8 @@ import os
 TOKEN = os.environ['TOKEN']
 
 class VehicleAPI:
-    def __init__(self, vehicle_id = None):
+    def __init__(self, controller, vehicle_id = None):
+        self.__controller = controller
         self.__vehicle_id = vehicle_id or self.tesla_vehicle_id()
         
     def tesla_vehicle_id(self):
@@ -33,11 +34,19 @@ class VehicleAPI:
     def json_rest_v1(self, path, data=None):
         url = 'https://owner-api.teslamotors.com/api/1' + path
         print("Requesting", url)
-        request= urllib2.Request(url, data)
-        print("Data", data)
-        request.add_header('Authorization', 'Bearer ' + TOKEN)
-        response = urllib2.urlopen(request)
-        return json.load(response)
+        try:
+            request= urllib2.Request(url, data)
+            print("Data", data)
+            request.add_header('Authorization', 'Bearer ' + TOKEN)
+            response = urllib2.urlopen(request)
+            return json.load(response)
+        except urllib2.HTTPError as e:
+            self.__controller.error(e)
+            return {
+                'response': {
+                    'result': False
+                }
+            }
     
     def tesla_command(self, action):
         vehicle = self.__vehicle_id
@@ -49,12 +58,14 @@ class VehicleAPI:
         print("Waking")
         wake_response = self.json_rest_v1("/vehicles/" + vehicle + "/wake_up", {})
         print("Wake response: " + str(wake_response))
+        if not wake_response['response']['result']:
+            return 'Unable to wake up your car'
         print("Getting climate")
         climate_response = self.json_rest_v1("/vehicles/" + vehicle + "/data_request/climate_state", None)
         print("Climate response: " + str(climate_response))
-        inside = climate_response["response"]["inside_temp"]
-        outside = climate_response["response"]["outside_temp"]
-        setting = climate_response["response"]["driver_temp_setting"]
+        inside = climate_response["response"].get(["inside_temp")
+        outside = climate_response["response"].get("outside_temp")
+        setting = climate_response["response"].get(["driver_temp_setting")
         return "Your car is currently at " + str(inside) + " degrees, with a setting of " + str(setting) + " degrees."
     
     def tesla_wake_and_precondition(self):
@@ -62,6 +73,8 @@ class VehicleAPI:
         print("Waking")
         wake_response = self.json_rest_v1("/vehicles/" + vehicle + "/wake_up", {})
         print("Wake response: " + str(wake_response))
+        if not wake_response['response']['result']:
+            return 'Unable to wake up your car'
         print("Starting HVAC")
         result = self.tesla_command('auto_conditioning_start')
         print("auto_conditioning_start response: " + str(result))
@@ -85,84 +98,14 @@ class VehicleAPI:
 
 # --------------- Helpers that build all of the responses ----------------------
 
-def build_speechlet_response(title, output, reprompt_text=None, should_end_session=True):
-    return {
-        'outputSpeech': {
-            'type': 'PlainText',
-            'text': output
-        },
-        'card': {
-            'type': 'Simple',
-            'title': "SessionSpeechlet - " + title,
-            'content': "SessionSpeechlet - " + output
-        },
-        'reprompt': {
-            'outputSpeech': {
-                'type': 'PlainText',
-                'text': reprompt_text
-            }
-        },
-        'shouldEndSession': should_end_session
-    }
-
-
-
-
-# --------------- Functions that control the skill's behavior ------------------
-
-def set_color_in_session(intent, session):
-    """ Sets the color in the session and prepares the speech to reply to the
-    user.
-    """
-
-    card_title = intent['name']
-    session_attributes = {}
-    should_end_session = False
-
-    if 'Color' in intent['slots']:
-        favorite_color = intent['slots']['Color']['value']
-        session_attributes = create_favorite_color_attributes(favorite_color)
-        speech_output = "I now know your favorite color is " + \
-                        favorite_color + \
-                        ". You can ask me your favorite color by saying, " \
-                        "what's my favorite color?"
-        reprompt_text = "You can ask me your favorite color by saying, " \
-                        "what's my favorite color?"
-    else:
-        speech_output = "I'm not sure what your favorite color is. " \
-                        "Please try again."
-        reprompt_text = "I'm not sure what your favorite color is. " \
-                        "You can tell me your favorite color by saying, " \
-                        "my favorite color is red."
-    return build_response(session_attributes, build_speechlet_response(
-        card_title, speech_output, reprompt_text, should_end_session))
-
-
-def get_color_from_session(intent, session):
-    session_attributes = {}
-    reprompt_text = None
-
-    if session.get('attributes', {}) and "favoriteColor" in session.get('attributes', {}):
-        favorite_color = session['attributes']['favoriteColor']
-        speech_output = "Your favorite color is " + favorite_color + \
-                        ". Goodbye."
-        should_end_session = True
-    else:
-        speech_output = "I'm not sure what your favorite color is. " \
-                        "You can say, my favorite color is red."
-        should_end_session = False
-
-    # Setting reprompt_text to None signifies that we do not want to reprompt
-    # the user. If the user does not respond or says something that is not
-    # understood, the session will end.
-    return build_response(session_attributes, build_speechlet_response(
-        intent['name'], speech_output, reprompt_text, should_end_session))
 
 class SkillController:
     def __init__(self, intent=None, session=None, session_attributes=None):
         self.__intent = intent
         self.__session = session
         self.__session_attributes = session_attributes
+        self.__should_end_session = True
+        self.__error = None
     
     def get_welcome_response(self):
         """ If we wanted to initialize the session to have some attributes we could
@@ -170,53 +113,101 @@ class SkillController:
         """
         card_title = "Welcome"
         speech_output = "This skill is 100% unofficial " \
-                    "You can precondition the HVAC system of your car by saing, " \
+                    "You can precondition the HVAC system of your car by saying, " \
                     "warm up"
         # If the user either does not reply to the welcome message or says something
         # that is not understood, they will be prompted again with this text.
-        reprompt_text = "I'm not feeling very patient, right now."
-        should_end_session = False
-        return self.build_response(build_speechlet_response(
-            card_title, speech_output, reprompt_text, should_end_session))
+        reprompt_text = "I understand the phrases: warm up, cool down, and status"
+        self.speechlet(cart_title, speech_output, reprompt_text)
+        self.keep_session_open()
+        return self.build_response()
 
 
     def handle_session_end_request(self):
         card_title = "Session Ended"
         speech_output = "Have a nice day! "
-        return self.build_response(build_speechlet_response(
-            card_title, speech_output))
+        self.speechlet(card_title, speech_output)
+        return self.build_response()
 
     def climate(self):
         intent = self.__intent
         vehicle_id = self.vehicle_id()
         speech_output = VehicleAPI(vehicle_id).tesla_get_climate()
-        return self.build_response(build_speechlet_response(
-            intent['name'], speech_output))
+        self.speechlet(intent['name'], speech_output)
+        return self.build_response()
 
     def precondition(self):
         intent = self.__intent
         vehicle_id = self.vehicle_id()
         speech_output = VehicleAPI(vehicle_id).tesla_wake_and_precondition()
-        return self.build_response(build_speechlet_response(
-            intent['name'], speech_output))
+        self.speechlet(intent['name'], speech_output)
+        return self.build_response()
         
     def stop_precondition(self):
         intent = self.__intent
         vehicle_id = self.vehicle_id()
         speech_output = VehicleAPI(vehicle_id).tesla_stop_precondition()
-        return self.build_response(build_speechlet_response(
-            intent['name'], speech_output))
+        self.speechlet(intent['name'], speech_output)
+        return self.build_response()
             
     def vehicle_id(self):
         return self.__session_attributes.get('vehicle_id') or self.__session.get('attributes', {}).get('vehicle_id')
+
+    def error(self, error):
+        self.__error = error
+        title = "An error occured accessing the Tesla API"
+        output = "Unable to complete action: " + error.reason
+        if isinstance(error, urllib2.HTTPError):
+            title = "HTTP " + error.code + " accessing Tesla API",
+            output = "Unable to use Tesla API: " + error.reason
+            if 401 == error.code:
+                title = "Authentication Failure"
+                output = "Please authenticate using the Alexa app"
+        self.speechlet(title, output)
         
+    def keep_session_open(self):
+        self.__should_end_session = False
+
+    def speechlet(self, title, output, reprompt_text=None):
+        self.__title = title
+        self.__output = output
+        self.__reprompt_text = reprompt_text
     
-    def build_response(self, speechlet_response):
+    def build_response(self):
         return {
             'version': '1.0',
             'sessionAttributes': self.__session_attributes,
-            'response': speechlet_response
+            'response': self.build_speechlet_response()
         }
+
+    def build_speechlet_response(self):
+        return {
+            'outputSpeech': {
+                'type': 'PlainText',
+                'text': self.__output
+            },
+            'card': self.build_card(),
+            'reprompt': {
+                'outputSpeech': {
+                    'type': 'PlainText',
+                    'text': self.__reprompt_text
+                }
+            },
+            'shouldEndSession': self.__should_end_session
+        }
+
+    def build_card(self):
+        if (self.__error and isinstance(self.__error, urllib2.HTTPError) and 401 = self.__error.code):
+            return {
+                'type': 'LinkAccount'
+            }
+        else:
+            return {
+                'type': 'Simple',
+                'title': self.__title,
+                'content': self.__output
+            }
+
 
 # --------------- Events ------------------
 
