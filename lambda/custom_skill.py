@@ -23,13 +23,14 @@ TOKEN = os.environ['TOKEN']
 class VehicleAPI:
     def __init__(self, controller, vehicle_id = None):
         self.__controller = controller
-        self.__vehicle_id = vehicle_id or self.tesla_vehicle_id()
+        self.__vehicle_id = vehicle_id or first_vehicle_id
+
+    def first_vehicle_id(self):
+        return str(self.vehicles()[0]["id"])
         
-    def tesla_vehicle_id(self):
+    def vehicles(self):
         result = self.json_rest_v1('/vehicles')
-        print("Vehicle list", result)
-        return str(result["response"][0]["id"])
-    
+        return result
 
     def json_rest_v1(self, path, data=None):
         url = 'https://owner-api.teslamotors.com/api/1' + path
@@ -39,59 +40,44 @@ class VehicleAPI:
             print("Data", data)
             request.add_header('Authorization', 'Bearer ' + TOKEN)
             response = urllib2.urlopen(request)
-            return json.load(response)
+            return json.load(response)["response"]
         except urllib2.HTTPError as e:
             self.__controller.error(e)
             return {
-                'response': {
-                    'result': False
-                }
+                'result': False
             }
     
-    def tesla_command(self, action):
+    def command(self, action):
         vehicle = self.__vehicle_id
         return self.json_rest_v1('/vehicles/' + vehicle + '/command/' + action,
             urlencode({"vehicle_id": vehicle}))
-            
-    def tesla_get_climate(self):
+
+    def climate_state(self):
         vehicle = self.__vehicle_id
-        print("Waking")
+        return self.json_rest_v1("/vehicles/" + vehicle + "/data_request/climate_state", None)
+
+    def precondition(self):
+        return self.command('auto_conditioning_start')
+
+    def wake(self):
+        vehicle = self.__vehicle_id
         wake_response = self.json_rest_v1("/vehicles/" + vehicle + "/wake_up", {})
-        print("Wake response: " + str(wake_response))
-        if not wake_response['response']['result']:
-            return 'Unable to wake up your car'
-        print("Getting climate")
-        climate_response = self.json_rest_v1("/vehicles/" + vehicle + "/data_request/climate_state", None)
-        print("Climate response: " + str(climate_response))
-        inside = climate_response["response"].get(["inside_temp")
-        outside = climate_response["response"].get("outside_temp")
-        setting = climate_response["response"].get(["driver_temp_setting")
-        return "Your car is currently at " + str(inside) + " degrees, with a setting of " + str(setting) + " degrees."
+        if not wake_response['result']:
+            return wake_response
+        return None
+
+    def wake_and_then(self, callback):
+        return self.wake() or callback()
+            
+    def get_climate(self):
+        return self.wake_and_then(self.climate_state)
     
-    def tesla_wake_and_precondition(self):
-        vehicle = self.__vehicle_id
-        print("Waking")
-        wake_response = self.json_rest_v1("/vehicles/" + vehicle + "/wake_up", {})
-        print("Wake response: " + str(wake_response))
-        if not wake_response['response']['result']:
-            return 'Unable to wake up your car'
-        print("Starting HVAC")
-        result = self.tesla_command('auto_conditioning_start')
-        print("auto_conditioning_start response: " + str(result))
-        if result['response']['result']:
-            return "OK, your car is preparing"
-        else:
-            return "Sorry " + response['reason']
+    def wake_and_precondition(self):
+        return self.wake_and_then(self.precondition)
             
-    def tesla_stop_precondition(self):
+    def stop_precondition(self):
         vehicle = self.__vehicle_id
-        print("Stopping HVAC")
-        result = self.tesla_command('auto_conditioning_stop')
-        print("auto_conditioning_stop response: " + str(result))
-        if result['response']['result']:
-            return "OK, your car is no longer preparing"
-        else:
-            return "Sorry " + response['reason']
+        return self.command('auto_conditioning_stop')
             
     def vehicle_id(self):
         return self.__vehicle_id
@@ -132,21 +118,34 @@ class SkillController:
     def climate(self):
         intent = self.__intent
         vehicle_id = self.vehicle_id()
-        speech_output = VehicleAPI(vehicle_id).tesla_get_climate()
+        climate_response = VehicleAPI(vehicle_id).get_climate()
+        print("Climate response: " + str(climate_response))
+        inside = climate_response.get("inside_temp")
+        outside = climate_response.get("outside_temp")
+        setting = climate_response.get("driver_temp_setting")
+        speech_output = "Your car is currently at " + str(inside) + " degrees, with a setting of " + str(setting) + " degrees."
         self.speechlet(intent['name'], speech_output)
         return self.build_response()
 
     def precondition(self):
         intent = self.__intent
         vehicle_id = self.vehicle_id()
-        speech_output = VehicleAPI(vehicle_id).tesla_wake_and_precondition()
+        result = VehicleAPI(vehicle_id).wake_and_precondition()
+        print("auto_conditioning_start response: " + str(result))
+        speech_output = "OK, your car is preparing"
+        if not result['result']:
+            speech_output = "Sorry " + response['reason']
         self.speechlet(intent['name'], speech_output)
         return self.build_response()
         
     def stop_precondition(self):
         intent = self.__intent
         vehicle_id = self.vehicle_id()
-        speech_output = VehicleAPI(vehicle_id).tesla_stop_precondition()
+        result = VehicleAPI(vehicle_id).tesla_stop_precondition()
+        print("auto_conditioning_stop response: " + str(result))
+        speech_output = "OK, your car is no longer preparing"
+        if not result['result']:
+            return "Sorry " + response['reason']
         self.speechlet(intent['name'], speech_output)
         return self.build_response()
             
@@ -197,7 +196,7 @@ class SkillController:
         }
 
     def build_card(self):
-        if (self.__error and isinstance(self.__error, urllib2.HTTPError) and 401 = self.__error.code):
+        if (self.__error and isinstance(self.__error, urllib2.HTTPError) and 401 == self.__error.code):
             return {
                 'type': 'LinkAccount'
             }
