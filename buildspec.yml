@@ -14,8 +14,7 @@ phases:
   build:
     commands:
       - echo Build started on `date`
-      - cd lambda
-      - python -m unittest discover
+      - python -m unittest discover -s lambda
   post_build:
     commands:
       - echo Build completed on `date`
