@@ -2,56 +2,59 @@ import custom_skill
 import unittest
 import urllib2
 
-class VehicleAPIVehiclesSuccessTestCase(unittest.TestCase):
-    STUB_RESPONSE = [
-                {
-                    "color": None,
-                    "display_name": None,
-                    "id": 321,
-                    "option_codes": "",
-                    "user_id": 123,
-                    "vehicle_id": 1234567890,
-                    "vin": "5YJSA1CN5CFP01657",
-                    "tokens": [
-                        "x",
-                        "x"
-                        ],
-                    "state": "online"
-                }
-            ]
+class APIStub(custom_skill.VehicleAPI):
+    def __init__(self, error_handler, response):
+        super(APIStub, self).__init__(error_handler, "1")
+        self.response = response
 
+    def json_rest_v1(self, path, data=None):
+        return self.response
+
+class VehicleTestCase(unittest.TestCase):
     def error(self, e):
         self.fail(e)
 
-    def setUp(self):
-        self.vapi = custom_skill.VehicleAPI(self, "1")
-        self.vapi.json_rest_v1 = self.json_rest_v1
-
-    def json_rest_v1(self, path, data=None):
-        return VehicleAPIVehiclesSuccessTestCase.STUB_RESPONSE
 
     def test_first_vehicle_id(self):
-        self.assertEqual(self.vapi.first_vehicle_id(), "321")
+        VEHICLES_SUCCESS = [
+            {
+                "color": None,
+                "display_name": None,
+                "id": 321,
+                "option_codes": "",
+                "user_id": 123,
+                "vehicle_id": 1234567890,
+                "vin": "5YJSA1CN5CFP01657",
+                "tokens": [
+                    "x",
+                    "x"
+                    ],
+                "state": "online"
+            }
+        ]
+        stub = APIStub(self, VEHICLES_SUCCESS)
+        self.assertEqual(stub.first_vehicle_id(), "321")
 
-
-class VehicleAPICommandSuccessTestCase(unittest.TestCase):
-    STUB_RESPONSE = {
+    def test_command(self):
+        COMMAND_SUCCESS = {
             "result": True,
             "reason": ""
         }
-
-    def error(self, e):
-        self.fail(e)
-
-    def setUp(self):
-        self.vapi = custom_skill.VehicleAPI(self, "1")
-        self.vapi.json_rest_v1 = self.json_rest_v1
-
-    def json_rest_v1(self, path, data=None):
-        return VehicleAPICommandSuccessTestCase.STUB_RESPONSE
-
-    def test_command(self):
-        response = self.vapi.command("auto_conditioning_start")
-        print "Response is " + str(response)
+        response = APIStub(self, COMMAND_SUCCESS).command("auto_conditioning_start")
         self.assertTrue(response["result"])
+
+    def test_climate_state(self):
+        CLIMATE_SUCCESS = {
+                "inside_temp": 17.0,
+                "outside_temp": 9.5,
+                "driver_temp_setting": 22.6,
+                "passenger_temp_setting": 22.6,
+                "is_auto_conditioning_on": False,
+                "is_front_defroster_on": None,
+                "is_rear_defroster_on": False,
+                "fan_status": 0
+        }
+        response = APIStub(self, CLIMATE_SUCCESS).climate_state()
+        self.assertEqual(response["inside_temp"], 17.0)
+        self.assertEqual(response["outside_temp"], 9.5)
 

@@ -20,10 +20,10 @@ from urllib import urlencode
 import os
 TOKEN = os.environ['TOKEN']
 
-class VehicleAPI:
+class VehicleAPI(object):
     def __init__(self, controller, vehicle_id = None):
         self.__controller = controller
-        self.__vehicle_id = vehicle_id or first_vehicle_id
+        self.__vehicle_id = vehicle_id or self.first_vehicle_id()
 
     def first_vehicle_id(self):
         return str(self.vehicles()[0]["id"])
