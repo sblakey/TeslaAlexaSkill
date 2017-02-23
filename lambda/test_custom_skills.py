@@ -40,8 +40,10 @@ class VehicleTestCase(unittest.TestCase):
             "result": True,
             "reason": ""
         }
-        response = APIStub(self, COMMAND_SUCCESS).command("auto_conditioning_start")
-        self.assertTrue(response["result"])
+        stub = APIStub(self, COMMAND_SUCCESS)
+        self.assertTrue(stub.command("auto_conditionin_start")["result"])
+        self.assertTrue(stub.precondition()["result"])
+        self.assertTrue(stub.stop_precondition()["result"])
 
     def test_climate_state(self):
         CLIMATE_SUCCESS = {
@@ -58,3 +60,18 @@ class VehicleTestCase(unittest.TestCase):
         self.assertEqual(response["inside_temp"], 17.0)
         self.assertEqual(response["outside_temp"], 9.5)
 
+    def test_wake(self):
+        COMMAND_SUCCESS = {
+            "result": True,
+            "reason": ""
+        }
+        response = APIStub(self, COMMAND_SUCCESS).wake()
+        self.assertTrue(response["result"])
+
+    def test_wake_and_precondition(self):
+        COMMAND_SUCCESS = {
+            "result": True,
+            "reason": ""
+        }
+        response = APIStub(self, COMMAND_SUCCESS).wake_and_precondition()
+        self.assertTrue(response["result"])
