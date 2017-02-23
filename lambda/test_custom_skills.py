@@ -66,7 +66,6 @@ class VehicleTestCase(unittest.TestCase):
             "reason": ""
         }
         response = APIStub(self, COMMAND_SUCCESS).wake()
-        self.assertTrue(response["result"])
 
     def test_wake_and_precondition(self):
         COMMAND_SUCCESS = {
