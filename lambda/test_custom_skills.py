@@ -74,3 +74,17 @@ class VehicleTestCase(unittest.TestCase):
         }
         response = APIStub(self, COMMAND_SUCCESS).wake_and_precondition()
         self.assertTrue(response["result"])
+
+class SkillControllerTestCase(unittest.TestCase):
+    def test_build_response(self):
+        controller = custom_skill.SkillController()
+        controller.speechlet("Test title", "Test speech")
+        response = controller.build_response()
+        self.assertEqual("1.0", response["version"])
+        self.assertEqual("PlainText", response["response"]["outputSpeech"]["type"])
+        self.assertEqual("Test speech", response["response"]["outputSpeech"]["text"])
+        self.assertEqual("Simple", response["response"]["card"]["type"])
+        self.assertEqual("Test title", response["response"]["card"]["title"])
+        self.assertEqual("Test speech", response["response"]["card"]["content"])
+        self.assertEqual("PlainText", response["response"]["outputSpeech"]["type"])
+        self.assertEqual(True, response["response"]["shouldEndSession"])
